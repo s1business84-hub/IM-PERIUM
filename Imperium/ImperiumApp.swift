@@ -12,6 +12,8 @@ import SwiftData
 struct ImperiumApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
+            LogEntry.self,
+            Insight.self,
             Item.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
