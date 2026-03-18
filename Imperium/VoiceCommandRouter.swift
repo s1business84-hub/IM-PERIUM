@@ -17,9 +17,9 @@ struct VoiceCommandRouter {
         } else if text.contains("show dashboard") || text.contains("dashboard") || text.contains("overview") {
             viewModel.currentTab = .dashboard
             viewModel.showBanner("Command recognized: Show Overview")
-        } else if text.contains("start") || text.contains("landing") || text.contains("home") {
+        } else if text.contains("landing") || text.contains("home") || text.contains("open landing") {
             viewModel.currentTab = .home
-            viewModel.showBanner("Command recognized: Open Start")
+            viewModel.showBanner("Command recognized: Open Landing")
         } else if text.contains("clear transcript") || text.contains("clear") {
             viewModel.showBanner("Transcript cleared")
         } else {

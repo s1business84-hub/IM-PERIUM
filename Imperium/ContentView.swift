@@ -36,44 +36,6 @@ final class Insight {
     }
 }
 
-struct BehaviorPattern: Identifiable {
-    let id = UUID()
-    let day: String
-    let score: Double
-    let state: PatternState
-
-    enum PatternState: String {
-        case strong = "Strong"
-        case unstable = "Unstable"
-        case risk = "Risk"
-
-        var color: Color {
-            switch self {
-            case .strong:
-                return Color(red: 0.10, green: 0.58, blue: 0.45)
-            case .unstable:
-                return Color(red: 0.89, green: 0.61, blue: 0.14)
-            case .risk:
-                return Color(red: 0.80, green: 0.26, blue: 0.22)
-            }
-        }
-    }
-}
-
-struct BehaviorAction: Identifiable {
-    let id = UUID()
-    let title: String
-    let detail: String
-}
-
-struct MetricHighlight: Identifiable {
-    let id = UUID()
-    let title: String
-    let value: String
-    let note: String
-    let color: Color
-}
-
 enum SubscriptionTier: String, CaseIterable {
     case free
     case pro
@@ -92,7 +54,7 @@ enum SubscriptionTier: String, CaseIterable {
         case .free:
             return "$0"
         case .pro:
-            return "$11.99/mo"
+            return "$45/mo"
         }
     }
 
@@ -106,42 +68,530 @@ enum SubscriptionTier: String, CaseIterable {
     }
 }
 
-private let patternSeries: [BehaviorPattern] = [
-    BehaviorPattern(day: "Mon", score: 74, state: .strong),
-    BehaviorPattern(day: "Tue", score: 68, state: .strong),
-    BehaviorPattern(day: "Wed", score: 52, state: .unstable),
-    BehaviorPattern(day: "Thu", score: 47, state: .risk),
-    BehaviorPattern(day: "Fri", score: 61, state: .unstable),
-    BehaviorPattern(day: "Sat", score: 82, state: .strong),
-    BehaviorPattern(day: "Sun", score: 78, state: .strong)
-]
+enum CheckInMoment: String, CaseIterable, Hashable {
+    case morning
+    case midday
+    case evening
+    case closeDown
 
-private let positiveActions: [BehaviorAction] = [
-    BehaviorAction(title: "Morning check-ins are consistent", detail: "You review your plan before noon on 6 of the last 7 days."),
-    BehaviorAction(title: "Recovery after misses is improving", detail: "When you slip, you return to baseline in one session instead of drifting for the whole day."),
-    BehaviorAction(title: "Weekend structure is stronger", detail: "Saturday and Sunday show the highest completion scores and fewer late changes.")
-]
+    var title: String {
+        switch self {
+        case .morning:
+            return "Morning"
+        case .midday:
+            return "Midday"
+        case .evening:
+            return "Evening"
+        case .closeDown:
+            return "Close-Down"
+        }
+    }
 
-private let riskActions: [BehaviorAction] = [
-    BehaviorAction(title: "Late-day decisions break routine", detail: "Most drops happen after 7 PM when tasks are chosen reactively instead of from plan."),
-    BehaviorAction(title: "Context switching is the main trigger", detail: "You lose momentum after two or more priority changes in the same block."),
-    BehaviorAction(title: "Skipped review leads to noisy next day", detail: "When you end a day without a reset, the following morning starts weaker.")
-]
+    var icon: String {
+        switch self {
+        case .morning:
+            return "sunrise.fill"
+        case .midday:
+            return "sun.max.fill"
+        case .evening:
+            return "sunset.fill"
+        case .closeDown:
+            return "moon.stars.fill"
+        }
+    }
+}
 
-private let changeActions: [BehaviorAction] = [
-    BehaviorAction(title: "Lock one shutdown ritual", detail: "End each day with a two-minute review and set the first task for tomorrow."),
-    BehaviorAction(title: "Cap late work to one objective", detail: "After 7 PM, allow only one planned action and defer everything else."),
-    BehaviorAction(title: "Use trigger-based alerts", detail: "Prompt yourself when three task switches happen inside one hour.")
-]
+enum CheckInCategory: String, CaseIterable, Hashable {
+    case execution
+    case spending
+    case debt
+    case focus
+    case recovery
 
-private let overviewMetrics: [MetricHighlight] = [
-    MetricHighlight(title: "Pattern Score", value: "74%", note: "Up 9% this week", color: Color(red: 0.10, green: 0.58, blue: 0.45)),
-    MetricHighlight(title: "Recovery Rate", value: "81%", note: "Faster bounce-back", color: Color(red: 0.15, green: 0.47, blue: 0.79)),
-    MetricHighlight(title: "Risk Window", value: "7-9 PM", note: "Highest drift period", color: Color(red: 0.89, green: 0.61, blue: 0.14))
-]
+    var title: String {
+        rawValue.capitalized
+    }
+
+    var icon: String {
+        switch self {
+        case .execution:
+            return "flag.fill"
+        case .spending:
+            return "creditcard.fill"
+        case .debt:
+            return "chart.line.downtrend.xyaxis"
+        case .focus:
+            return "scope"
+        case .recovery:
+            return "heart.text.square.fill"
+        }
+    }
+}
+
+enum CheckInStatus: String, CaseIterable, Hashable {
+    case onTrack
+    case mixed
+    case atRisk
+
+    var title: String {
+        switch self {
+        case .onTrack:
+            return "On Track"
+        case .mixed:
+            return "Mixed"
+        case .atRisk:
+            return "At Risk"
+        }
+    }
+
+    var score: Int {
+        switch self {
+        case .onTrack:
+            return 86
+        case .mixed:
+            return 63
+        case .atRisk:
+            return 39
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .onTrack:
+            return Color(red: 0.10, green: 0.58, blue: 0.45)
+        case .mixed:
+            return Color(red: 0.89, green: 0.61, blue: 0.14)
+        case .atRisk:
+            return Color(red: 0.80, green: 0.26, blue: 0.22)
+        }
+    }
+}
+
+enum EntrySource: String {
+    case voice
+    case typed
+}
+
+struct GuidedPrompt: Identifiable, Hashable {
+    let id = UUID()
+    let moment: CheckInMoment
+    let category: CheckInCategory
+    let question: String
+    let hint: String
+}
+
+struct DailyCheckInEntry: Identifiable {
+    let id = UUID()
+    let date: Date
+    let prompt: GuidedPrompt
+    let status: CheckInStatus
+    let response: String
+    let source: EntrySource
+}
+
+struct MetricHighlight: Identifiable {
+    let id = UUID()
+    let title: String
+    let value: String
+    let note: String
+    let color: Color
+}
+
+struct CategorySnapshot: Identifiable {
+    let id = UUID()
+    let category: CheckInCategory
+    let averageScore: Int
+    let entryCount: Int
+    let summary: String
+}
+
+struct BehaviorPattern: Identifiable {
+    let id = UUID()
+    let day: String
+    let score: Double
+    let color: Color
+}
+
+struct BehaviorAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+}
+
+struct PromptFreeAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let category: CheckInCategory
+    let status: CheckInStatus
+    let response: String
+}
+
+struct AutoInsight: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+    let icon: String
+}
+
+final class DailyCheckInStore: ObservableObject {
+    @Published var entries: [DailyCheckInEntry]
+    @Published var selectedPromptIndex = 0
+
+    private var pendingVoicePrompt: GuidedPrompt?
+    private var pendingVoiceStatus: CheckInStatus = .mixed
+
+    init(entries: [DailyCheckInEntry] = DailyCheckInStore.seedEntries()) {
+        self.entries = entries
+    }
+
+    var todayPrompts: [GuidedPrompt] {
+        let riskTitle = riskiestCategory?.title.lowercased() ?? "spending"
+        return [
+            GuidedPrompt(
+                moment: .morning,
+                category: .execution,
+                question: "What is the one outcome that matters most this morning, and what could derail it?",
+                hint: "Your stronger days start when the first task is decided early."
+            ),
+            GuidedPrompt(
+                moment: .midday,
+                category: .spending,
+                question: "Any spending decisions yet? What have you bought, delayed, or talked yourself into today?",
+                hint: "This week the highest pressure is around \(riskTitle)."
+            ),
+            GuidedPrompt(
+                moment: .evening,
+                category: .debt,
+                question: "Any interest accumulation, debt pressure, or repeated spending building up today?",
+                hint: "Call out where money is compounding against you before it becomes a weekly problem."
+            ),
+            GuidedPrompt(
+                moment: .closeDown,
+                category: .recovery,
+                question: "Where did you go off-plan today, what still feels right, and what changes tomorrow?",
+                hint: "Close the day with one adjustment instead of vague reflection."
+            )
+        ]
+    }
+
+    var todayEntries: [DailyCheckInEntry] {
+        entries
+            .filter { Calendar.current.isDateInToday($0.date) }
+            .sorted { $0.date < $1.date }
+    }
+
+    var weeklyEntries: [DailyCheckInEntry] {
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: .now)
+        guard let start = calendar.date(byAdding: .day, value: -6, to: startOfToday) else { return entries }
+        return entries.filter { $0.date >= start }
+    }
+
+    var answeredPromptCount: Int {
+        todayEntries.count
+    }
+
+    var hasPendingVoiceCapture: Bool {
+        pendingVoicePrompt != nil
+    }
+
+    var currentPrompt: GuidedPrompt {
+        let prompts = todayPrompts
+        let index = min(selectedPromptIndex, max(prompts.count - 1, 0))
+        return prompts[index]
+    }
+
+    var summaryHighlights: [MetricHighlight] {
+        [
+            MetricHighlight(
+                title: "Answered Today",
+                value: "\(answeredPromptCount)/\(todayPrompts.count)",
+                note: answeredPromptCount == todayPrompts.count ? "All daily prompts covered" : "Keep answering through the day",
+                color: Color(red: 0.15, green: 0.47, blue: 0.79)
+            ),
+            MetricHighlight(
+                title: "Weekly Pattern Score",
+                value: "\(weeklyAverageScore)%",
+                note: weakMomentSummary,
+                color: Color(red: 0.10, green: 0.58, blue: 0.45)
+            ),
+            MetricHighlight(
+                title: "Overspend Risk",
+                value: riskiestCategory?.title ?? "Stable",
+                note: "Most pressure this week is in \(riskiestCategory?.title.lowercased() ?? "execution")",
+                color: Color(red: 0.89, green: 0.61, blue: 0.14)
+            )
+        ]
+    }
+
+    var categorySnapshots: [CategorySnapshot] {
+        CheckInCategory.allCases.compactMap { category in
+            let categoryEntries = weeklyEntries.filter { $0.prompt.category == category }
+            guard !categoryEntries.isEmpty else { return nil }
+            let average = categoryEntries.map(\.status.score).reduce(0, +) / categoryEntries.count
+            let latest = categoryEntries.sorted(by: { $0.date > $1.date }).first?.response ?? "No detail captured."
+            return CategorySnapshot(
+                category: category,
+                averageScore: average,
+                entryCount: categoryEntries.count,
+                summary: latest
+            )
+        }
+        .sorted { $0.averageScore < $1.averageScore }
+    }
+
+    var patternSeries: [BehaviorPattern] {
+        let calendar = Calendar.current
+        let weekdaySymbols = calendar.shortWeekdaySymbols
+        let grouped = Dictionary(grouping: weeklyEntries) { entry in
+            calendar.component(.weekday, from: entry.date)
+        }
+
+        return weekdaySymbols.enumerated().map { index, name in
+            let key = index + 1
+            let dayEntries = grouped[key, default: []]
+            let average = dayEntries.isEmpty ? 0 : dayEntries.map(\.status.score).reduce(0, +) / dayEntries.count
+            let color: Color
+            switch average {
+            case 75...:
+                color = CheckInStatus.onTrack.color
+            case 50..<75:
+                color = CheckInStatus.mixed.color
+            default:
+                color = CheckInStatus.atRisk.color
+            }
+            return BehaviorPattern(day: name, score: Double(average), color: color)
+        }
+    }
+
+    var positiveActions: [BehaviorAction] {
+        let stableCategories = categorySnapshots.filter { $0.averageScore >= 70 }
+        let first = stableCategories.first?.category.title ?? "Execution"
+        return [
+            BehaviorAction(title: "\(first) is holding up", detail: "Your strongest category is \(first.lowercased()), which means part of the system is already repeatable."),
+            BehaviorAction(title: "Voice capture reduces friction", detail: "Answers can be spoken instead of manually logged, so the app keeps collecting context through the day."),
+            BehaviorAction(title: "Daily prompts are timed", detail: "Morning, midday, evening, and close-down questions create a consistent rhythm every day.")
+        ]
+    }
+
+    var riskActions: [BehaviorAction] {
+        let weakCategory = riskiestCategory?.title ?? "Spending"
+        return [
+            BehaviorAction(title: "\(weakCategory) is dragging the week", detail: "This category has the lowest average score and is where most at-risk answers are clustering."),
+            BehaviorAction(title: "Midday decisions are noisy", detail: "The day gets less structured once reactive spending or changing priorities shows up."),
+            BehaviorAction(title: "Close-down reflection is missing", detail: "Days with no end-of-day answer are more likely to start weak the next morning.")
+        ]
+    }
+
+    var changeActions: [BehaviorAction] {
+        [
+            BehaviorAction(title: "Answer every prompt in under 30 seconds", detail: "Keep the check-in lightweight so the data stays daily instead of becoming another task."),
+            BehaviorAction(title: "Use voice mode for high-friction moments", detail: "When you are moving fast, speak the answer and let the app capture the entry."),
+            BehaviorAction(title: "Correct the weakest category first", detail: "Start with \(riskiestCategory?.title.lowercased() ?? "spending") before optimizing the rest of the system.")
+        ]
+    }
+
+    var dailySummaryText: String {
+        guard !todayEntries.isEmpty else {
+            return "No answers logged yet today. Start with the morning question and keep each response short."
+        }
+
+        let onTrackCount = todayEntries.filter { $0.status == .onTrack }.count
+        let atRiskCount = todayEntries.filter { $0.status == .atRisk }.count
+        let categories = Set(todayEntries.map { $0.prompt.category.title }).sorted().joined(separator: ", ")
+        return "Today you answered \(todayEntries.count) prompts across \(categories). \(onTrackCount) are on track and \(atRiskCount) are at risk."
+    }
+
+    var promptFreeActions: [PromptFreeAction] {
+        [
+            PromptFreeAction(
+                title: "No extra spend",
+                detail: "Capture a clean spending decision without typing.",
+                category: .spending,
+                status: .onTrack,
+                response: "No extra spending today. I stayed with the plan."
+            ),
+            PromptFreeAction(
+                title: "Impulse spend",
+                detail: "Log a fast spending slip in one tap.",
+                category: .spending,
+                status: .atRisk,
+                response: "Impulse spending showed up today and needs review tonight."
+            ),
+            PromptFreeAction(
+                title: "Interest pressure",
+                detail: "Mark debt or interest build-up immediately.",
+                category: .debt,
+                status: .atRisk,
+                response: "Interest pressure is building and needs action this week."
+            ),
+            PromptFreeAction(
+                title: "Locked in",
+                detail: "Capture strong execution without filling a prompt.",
+                category: .execution,
+                status: .onTrack,
+                response: "Execution stayed tight and I followed the planned task flow."
+            )
+        ]
+    }
+
+    var autoInsights: [AutoInsight] {
+        [
+            AutoInsight(
+                title: "Passive spending watch",
+                detail: "Spending answers are showing more pressure than execution this week.",
+                icon: "creditcard.trianglebadge.exclamationmark"
+            ),
+            AutoInsight(
+                title: "Close-down weakness detected",
+                detail: weakMomentSummary,
+                icon: "moon.zzz.fill"
+            ),
+            AutoInsight(
+                title: "Fast capture is working",
+                detail: "Voice and one-tap entries are reducing manual logging friction.",
+                icon: "waveform.badge.mic"
+            )
+        ]
+    }
+
+    var riskiestCategory: CheckInCategory? {
+        categorySnapshots.first?.category
+    }
+
+    var weakMomentSummary: String {
+        let closeDownEntries = weeklyEntries.filter { $0.prompt.moment == .closeDown }
+        guard !closeDownEntries.isEmpty else { return "Need more close-down check-ins" }
+        let average = closeDownEntries.map(\.status.score).reduce(0, +) / closeDownEntries.count
+        return average < 60 ? "Close-down is your weakest moment" : "Close-down is holding steady"
+    }
+
+    var weeklyAverageScore: Int {
+        guard !weeklyEntries.isEmpty else { return 0 }
+        return weeklyEntries.map(\.status.score).reduce(0, +) / weeklyEntries.count
+    }
+
+    func entryForToday(prompt: GuidedPrompt) -> DailyCheckInEntry? {
+        todayEntries.first { $0.prompt.moment == prompt.moment }
+    }
+
+    func saveResponse(for prompt: GuidedPrompt, status: CheckInStatus, response: String, source: EntrySource) {
+        entries.removeAll {
+            Calendar.current.isDateInToday($0.date) && $0.prompt.moment == prompt.moment
+        }
+        entries.append(
+            DailyCheckInEntry(
+                date: .now,
+                prompt: prompt,
+                status: status,
+                response: response.isEmpty ? "No detail captured." : response,
+                source: source
+            )
+        )
+        advancePrompt()
+    }
+
+    func savePromptFreeAction(_ action: PromptFreeAction) {
+        let prompt = GuidedPrompt(
+            moment: inferredMoment,
+            category: action.category,
+            question: action.title,
+            hint: action.detail
+        )
+        entries.append(
+            DailyCheckInEntry(
+                date: .now,
+                prompt: prompt,
+                status: action.status,
+                response: action.response,
+                source: .typed
+            )
+        )
+    }
+
+    func advancePrompt() {
+        if selectedPromptIndex < todayPrompts.count - 1 {
+            selectedPromptIndex += 1
+        }
+    }
+
+    func prepareVoiceCapture(for prompt: GuidedPrompt, status: CheckInStatus) {
+        pendingVoicePrompt = prompt
+        pendingVoiceStatus = status
+    }
+
+    func capturePendingVoiceResponse(_ transcript: String) -> Bool {
+        guard let prompt = pendingVoicePrompt else { return false }
+        saveResponse(for: prompt, status: pendingVoiceStatus, response: transcript, source: .voice)
+        pendingVoicePrompt = nil
+        return true
+    }
+
+    func cancelVoiceCapture() {
+        pendingVoicePrompt = nil
+    }
+
+    private var inferredMoment: CheckInMoment {
+        let hour = Calendar.current.component(.hour, from: .now)
+        switch hour {
+        case ..<11:
+            return .morning
+        case 11..<16:
+            return .midday
+        case 16..<21:
+            return .evening
+        default:
+            return .closeDown
+        }
+    }
+
+    private static func seedEntries() -> [DailyCheckInEntry] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+
+        func day(_ offset: Int, hour: Int, minute: Int = 0) -> Date {
+            let base = calendar.date(byAdding: .day, value: offset, to: today) ?? today
+            return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: base) ?? base
+        }
+
+        let prompts = [
+            GuidedPrompt(moment: .morning, category: .execution, question: "Morning", hint: ""),
+            GuidedPrompt(moment: .midday, category: .spending, question: "Midday", hint: ""),
+            GuidedPrompt(moment: .evening, category: .debt, question: "Evening", hint: ""),
+            GuidedPrompt(moment: .closeDown, category: .recovery, question: "Close", hint: "")
+        ]
+
+        return [
+            DailyCheckInEntry(date: day(-2, hour: 8), prompt: prompts[0], status: .onTrack, response: "Clear morning target. No drift before noon.", source: .typed),
+            DailyCheckInEntry(date: day(-2, hour: 13), prompt: prompts[1], status: .mixed, response: "Bought lunch out and one impulse coffee after a long call.", source: .voice),
+            DailyCheckInEntry(date: day(-2, hour: 18), prompt: prompts[2], status: .atRisk, response: "Let card interest sit another day and ordered delivery twice.", source: .voice),
+            DailyCheckInEntry(date: day(-2, hour: 22), prompt: prompts[3], status: .mixed, response: "Skipped shutdown routine and started tomorrow without a first task.", source: .typed),
+            DailyCheckInEntry(date: day(-1, hour: 8), prompt: prompts[0], status: .onTrack, response: "Locked first objective before messages.", source: .typed),
+            DailyCheckInEntry(date: day(-1, hour: 13), prompt: prompts[1], status: .onTrack, response: "No extra spending, stayed with planned lunch.", source: .typed),
+            DailyCheckInEntry(date: day(-1, hour: 18), prompt: prompts[2], status: .mixed, response: "Interest pressure still there but no new spend today.", source: .voice),
+            DailyCheckInEntry(date: day(-1, hour: 22), prompt: prompts[3], status: .onTrack, response: "Closed the day well and set tomorrow's first task.", source: .typed),
+            DailyCheckInEntry(date: day(0, hour: 8), prompt: prompts[0], status: .mixed, response: "Main goal is clear, but meetings may fragment the morning.", source: .voice),
+            DailyCheckInEntry(date: day(0, hour: 13), prompt: prompts[1], status: .atRisk, response: "Spent on convenience because the day got rushed.", source: .voice)
+        ]
+    }
+}
+
+enum OverviewTab: String, CaseIterable {
+    case daily = "Daily Summary"
+    case category = "Category Wise"
+    case weekly = "Weekly Pattern"
+}
+
+enum TrackingTab: String, CaseIterable {
+    case prompts = "Prompt Flow"
+    case daily = "Daily Summary"
+    case category = "Category Wise"
+}
 
 struct StartLandingView: View {
     let tier: SubscriptionTier
+    @ObservedObject var store: DailyCheckInStore
     let onEnterApp: () -> Void
     let onOpenTracking: () -> Void
     let onOpenLog: () -> Void
@@ -152,7 +602,9 @@ struct StartLandingView: View {
             VStack(alignment: .leading, spacing: 22) {
                 hero
                 highlights
-                patternSummary
+                promptFreePanel
+                autoInsightsPanel
+                voiceSummary
                 planCard
             }
             .padding(20)
@@ -162,13 +614,13 @@ struct StartLandingView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Imperium")
                         .font(.system(size: 36, weight: .black, design: .rounded))
-                    Text("See the pattern before it becomes the problem.")
+                    Text("Own the day before it owns you.")
                         .font(.title3.weight(.semibold))
-                    Text("Behaviour tracking for execution, consistency, recovery, and the exact moments your routine breaks.")
+                    Text("Voice capture, quick actions, and automatic summaries keep Imperium learning with almost no friction.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -176,44 +628,25 @@ struct StartLandingView: View {
             }
 
             Button(action: onEnterApp) {
-                Label("Enter App", systemImage: "arrow.right.circle.fill")
+                Label("Open Dashboard", systemImage: "arrow.right.circle.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
 
             HStack(spacing: 12) {
-                Button(action: onOpenTracking) {
-                    Label("View Behaviour Tracking", systemImage: "waveform.path.ecg.rectangle")
+                Button(action: onOpenLog) {
+                    Label("Start Daily Check-In", systemImage: "mic.badge.plus")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button(action: onOpenLog) {
-                    Label("Open Log", systemImage: "square.and.pencil")
+                Button(action: onOpenTracking) {
+                    Label("Open Tracking", systemImage: "waveform.path.ecg.rectangle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
             }
-
-            Button(action: onUpgrade) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(tier == .pro ? "Manage Pro" : "Upgrade to Pro")
-                            .font(.headline)
-                        Text(tier == .pro ? "Advanced pattern reviews are enabled." : "Unlock deeper tracking, pattern history, and guided interventions.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "arrow.right.circle.fill")
-                        .font(.title3)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity)
-                .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            }
-            .buttonStyle(.plain)
         }
         .padding(24)
         .background(
@@ -221,75 +654,83 @@ struct StartLandingView: View {
                 colors: [
                     Color(red: 0.98, green: 0.93, blue: 0.82),
                     Color(red: 0.84, green: 0.93, blue: 0.89),
-                    Color.white.opacity(0.92)
+                    AppTheme.heroHighlight
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
             in: RoundedRectangle(cornerRadius: 30, style: .continuous)
         )
-        .overlay(alignment: .topTrailing) {
-            Circle()
-                .fill(Color(red: 0.89, green: 0.61, blue: 0.14).opacity(0.18))
-                .frame(width: 120, height: 120)
-                .offset(x: 28, y: -28)
-        }
     }
 
     private var highlights: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "This Week", subtitle: "The highest-signal behavioural summary")
-            ForEach(overviewMetrics) { metric in
-                InsightCard(title: metric.title, value: metric.value, note: metric.note, color: metric.color)
+            SectionHeader(title: "Live Summary", subtitle: "Built from daily check-in answers")
+            ForEach(store.summaryHighlights) { item in
+                InsightCard(title: item.title, value: item.value, note: item.note, color: item.color)
             }
         }
     }
 
-    private var patternSummary: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Pattern Snapshot", subtitle: "Where the system sees stability and drift")
-            SurfaceCard {
-                Chart(patternSeries) { item in
-                    LineMark(
-                        x: .value("Day", item.day),
-                        y: .value("Score", item.score)
-                    )
-                    .foregroundStyle(Color(red: 0.12, green: 0.41, blue: 0.67))
-                    .interpolationMethod(.catmullRom)
-
-                    AreaMark(
-                        x: .value("Day", item.day),
-                        y: .value("Score", item.score)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.12, green: 0.41, blue: 0.67).opacity(0.28),
-                                Color(red: 0.12, green: 0.41, blue: 0.67).opacity(0.02)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-
-                    PointMark(
-                        x: .value("Day", item.day),
-                        y: .value("Score", item.score)
-                    )
-                    .foregroundStyle(item.state.color)
-                }
-                .frame(height: 190)
-
-                Text("Saturday and Sunday are stable. Thursday is the recurring failure point and should be treated as an intervention day.")
-                    .font(.subheadline)
+    private var voiceSummary: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Voice-First Flow")
+                    .font(.headline)
+                Text("Tap voice mode on a prompt, speak your answer, and the app turns that into today’s daily summary and category summary automatically.")
                     .foregroundStyle(.secondary)
+                Text(store.dailySummaryText)
+                    .font(.subheadline.weight(.semibold))
+            }
+        }
+    }
+
+    private var promptFreePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Prompt-Free Capture", subtitle: "One tap when you do not want a full check-in")
+            ForEach(store.promptFreeActions) { action in
+                SurfaceCard {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: action.category.icon)
+                            .foregroundStyle(action.status.color)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(action.title)
+                                .font(.headline)
+                            Text(action.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    private var autoInsightsPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Automatic Signals", subtitle: "What the app can infer without asking")
+            ForEach(store.autoInsights) { insight in
+                SurfaceCard {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: insight.icon)
+                            .foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(insight.title)
+                                .font(.headline)
+                            Text(insight.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }
 
     private var planCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Plan Access", subtitle: "Free and Pro tiers")
+            SectionHeader(title: "Plan Access", subtitle: "Free and Pro")
             SubscriptionPanel(currentTier: tier) { _ in
                 onUpgrade()
             }
@@ -298,108 +739,92 @@ struct StartLandingView: View {
 }
 
 struct DailyLogView: View {
-    @State private var date = Date()
-    @State private var category = "Focus"
-    @State private var intensity: Double = 72
-    @State private var notes: String = ""
-    @State private var entries: [BehaviorLog] = [
-        BehaviorLog(date: .now, category: "Focus", score: 82, notes: "Strong start, one distraction after lunch."),
-        BehaviorLog(date: .now.addingTimeInterval(-86_400), category: "Routine", score: 59, notes: "Skipped evening review and drifted."),
-        BehaviorLog(date: .now.addingTimeInterval(-172_800), category: "Energy", score: 76, notes: "Recovered quickly after context switch.")
-    ]
+    @ObservedObject var store: DailyCheckInStore
+    let tier: SubscriptionTier
+    let isVoiceRecording: Bool
+    let isVoiceAuthorized: Bool
+    let transcript: String
+    let voiceStatusMessage: String?
+    let onVoiceToggle: (GuidedPrompt, CheckInStatus) -> Void
 
-    private let categories = ["Focus", "Routine", "Energy", "Execution", "Recovery"]
+    @State private var selectedStatus: CheckInStatus = .mixed
+    @State private var typedAnswer = ""
 
     var body: some View {
+        let prompt = store.currentPrompt
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(title: "Daily Tracking", subtitle: "Log the moment that helped or hurt your pattern")
+                SectionHeader(title: "Daily Check-In", subtitle: "Answer guided questions instead of manually logging everything")
 
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text("Current Average")
-                                .font(.headline)
-                            Spacer()
-                            Text("\(averageScore)%")
-                                .font(.title2.bold())
-                        }
-
-                        ProgressView(value: averageScoreValue)
-                            .tint(Color(red: 0.10, green: 0.58, blue: 0.45))
-
-                        Text("Use logs to capture what happened, why it happened, and what changed.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                quickCaptureRow
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        DatePicker("Date", selection: $date, displayedComponents: .date)
+                        HStack {
+                            Label(prompt.moment.title, systemImage: prompt.moment.icon)
+                                .font(.headline)
+                            Spacer()
+                            Text(prompt.category.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
 
-                        Picker("Signal", selection: $category) {
-                            ForEach(categories, id: \.self) { item in
-                                Text(item).tag(item)
+                        Text(prompt.question)
+                            .font(.title3.weight(.semibold))
+
+                        Text(prompt.hint)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Picker("Status", selection: $selectedStatus) {
+                            ForEach(CheckInStatus.allCases, id: \.self) { status in
+                                Text(status.title).tag(status)
                             }
                         }
                         .pickerStyle(.segmented)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Pattern Score")
-                                Spacer()
-                                Text("\(Int(intensity))")
-                                    .fontWeight(.semibold)
-                            }
-
-                            Slider(value: $intensity, in: 0...100, step: 1)
-                                .tint(Color(red: 0.12, green: 0.41, blue: 0.67))
-                        }
-
-                        TextField("What happened and why?", text: $notes, axis: .vertical)
+                        TextField("Type a short answer if you do not want to speak it", text: $typedAnswer, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
-                            .lineLimit(3...6)
+                            .lineLimit(2...5)
 
-                        Button {
-                            let entry = BehaviorLog(date: date, category: category, score: Int(intensity), notes: notes)
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                entries.insert(entry, at: 0)
+                        HStack(spacing: 12) {
+                            Button {
+                                let answer = typedAnswer.isEmpty ? "Quick check-in captured with no extra detail." : typedAnswer
+                                store.saveResponse(for: prompt, status: selectedStatus, response: answer, source: .typed)
+                                typedAnswer = ""
+                            } label: {
+                                Label("Save Typed Answer", systemImage: "square.and.arrow.down.fill")
+                                    .frame(maxWidth: .infinity)
                             }
-                            date = .now
-                            category = categories[0]
-                            intensity = 72
-                            notes = ""
-                        } label: {
-                            Label("Save Tracking Entry", systemImage: "plus.circle.fill")
-                                .frame(maxWidth: .infinity)
+                            .buttonStyle(.borderedProminent)
+
+                            Button {
+                                onVoiceToggle(prompt, selectedStatus)
+                            } label: {
+                                Label(isVoiceRecording ? "Stop Voice Mode" : "Start Voice Mode", systemImage: isVoiceRecording ? "waveform.circle.fill" : "mic.circle.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.borderedProminent)
+
+                        if let voiceStatusMessage {
+                            Text(voiceStatusMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if !transcript.isEmpty {
+                            Text("Last voice transcript: \(transcript)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: "Recent Entries", subtitle: "Newest first")
-                    ForEach(entries) { entry in
-                        SurfaceCard {
-                            HStack(alignment: .top, spacing: 12) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(entry.category)
-                                        .font(.headline)
-                                    Text(entry.date, style: .date)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    Text(entry.notes)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("\(entry.score)%")
-                                    .font(.title3.bold())
-                                    .foregroundStyle(entry.score >= 70 ? Color(red: 0.10, green: 0.58, blue: 0.45) : Color(red: 0.80, green: 0.26, blue: 0.22))
-                            }
-                        }
-                    }
+                promptSchedule
+                todayEntriesCard
+                if tier == .free {
+                    SubscriptionPanel(currentTier: tier) { _ in }
                 }
             }
             .padding(20)
@@ -407,109 +832,235 @@ struct DailyLogView: View {
         .background(AppBackdrop())
     }
 
-    private var averageScore: Int {
-        guard !entries.isEmpty else { return 0 }
-        let total = entries.reduce(0) { $0 + $1.score }
-        return total / entries.count
+    private var quickCaptureRow: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Quick Capture", subtitle: "Prompt-free buttons for the most common events")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(store.promptFreeActions) { action in
+                        Button {
+                            store.savePromptFreeAction(action)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(action.title)
+                                    .font(.headline)
+                                Text(action.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(16)
+                            .frame(width: 180, alignment: .leading)
+                            .background(AppTheme.surfaceFill, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
-    private var averageScoreValue: Double {
-        Double(averageScore) / 100
+    private var promptSchedule: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Today's Prompt Flow", subtitle: "These repeat every day")
+            ForEach(Array(store.todayPrompts.enumerated()), id: \.offset) { index, prompt in
+                let entry = store.entryForToday(prompt: prompt)
+                SurfaceCard {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: prompt.moment.icon)
+                            .foregroundStyle(entry?.status.color ?? .secondary)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(prompt.moment.title)
+                                .font(.headline)
+                            Text(prompt.question)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(entry?.status.title ?? "Pending")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(entry?.status.color ?? .secondary)
+                        }
+                        Spacer()
+                        if store.selectedPromptIndex == index {
+                            Text("Now")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(AppTheme.pillFill, in: Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var todayEntriesCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Today's Answers", subtitle: "Full daily summary input")
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(store.dailySummaryText)
+                        .font(.subheadline)
+                    ForEach(store.todayEntries.reversed()) { entry in
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(entry.prompt.moment.title)
+                                    .font(.headline)
+                                Spacer()
+                                Text(entry.status.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(entry.status.color)
+                            }
+                            Text(entry.response)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(entry.source == .voice ? "Captured via voice mode" : "Captured via typed answer")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 struct InsightsDashboardView: View {
+    @ObservedObject var store: DailyCheckInStore
+    @State private var selectedTab: OverviewTab = .daily
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(title: "Overview", subtitle: "Your behavioural system at a glance")
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Behaviour Quality")
-                            .font(.headline)
+                SectionHeader(title: "Overview", subtitle: "Daily summary, category wise summary, and weekly pattern")
 
-                        Chart(patternSeries) { item in
-                            BarMark(
-                                x: .value("Day", item.day),
-                                y: .value("Score", item.score)
-                            )
-                            .foregroundStyle(item.state.color.gradient)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .frame(height: 180)
-
-                        Text("The midweek drop is no longer random. It clusters around higher context switching and weaker shutdown habits.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                Picker("Overview Tab", selection: $selectedTab) {
+                    ForEach(OverviewTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
                     }
                 }
+                .pickerStyle(.segmented)
 
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("What This Means")
-                            .font(.headline)
-
-                        Text("You are not failing across the whole week. The breakdown is concentrated in a specific window, which makes it fixable.")
-                            .foregroundStyle(.secondary)
-
-                        Divider()
-
-                        Text("Priority")
-                            .font(.headline)
-
-                        Text("Stabilize Wednesday and Thursday evenings before trying to optimize the rest of the system.")
-                            .foregroundStyle(.secondary)
-                    }
+                switch selectedTab {
+                case .daily:
+                    dailySummaryView
+                case .category:
+                    categoryView
+                case .weekly:
+                    weeklyPatternView
                 }
             }
             .padding(20)
         }
         .background(AppBackdrop())
+    }
+
+    private var dailySummaryView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(store.summaryHighlights) { item in
+                InsightCard(title: item.title, value: item.value, note: item.note, color: item.color)
+            }
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Full Daily Summary")
+                        .font(.headline)
+                    Text(store.dailySummaryText)
+                        .foregroundStyle(.secondary)
+                    ForEach(store.todayEntries) { entry in
+                        Divider()
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(entry.prompt.moment.title) • \(entry.prompt.category.title)")
+                                    .font(.headline)
+                                Text(entry.response)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text("\(entry.status.score)%")
+                                .font(.title3.bold())
+                                .foregroundStyle(entry.status.color)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var categoryView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(store.categorySnapshots) { snapshot in
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Label(snapshot.category.title, systemImage: snapshot.category.icon)
+                                .font(.headline)
+                            Spacer()
+                            Text("\(snapshot.averageScore)%")
+                                .font(.title3.bold())
+                                .foregroundStyle(snapshot.averageScore >= 70 ? CheckInStatus.onTrack.color : snapshot.averageScore >= 50 ? CheckInStatus.mixed.color : CheckInStatus.atRisk.color)
+                        }
+                        Text("Entries this week: \(snapshot.entryCount)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(snapshot.summary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var weeklyPatternView: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Weekly Pattern")
+                    .font(.headline)
+                Chart(store.patternSeries) { item in
+                    BarMark(
+                        x: .value("Day", item.day),
+                        y: .value("Score", item.score)
+                    )
+                    .foregroundStyle(item.color.gradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .frame(height: 220)
+                Text(store.weakMomentSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
 struct BehavioralInsightsView: View {
     let tier: SubscriptionTier
+    @ObservedObject var store: DailyCheckInStore
     let onUpgrade: () -> Void
+
+    @State private var selectedTab: TrackingTab = .prompts
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                SectionHeader(title: "Behavioural Insights", subtitle: "Tracking patterns, showing what is right, what is wrong, and what to change")
+                SectionHeader(title: "Tracking", subtitle: "Prompt flow, full daily summary, and category wise tracking")
 
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text("Tracking Status")
-                                .font(.headline)
-                            Spacer()
-                            Label(tier == .pro ? "Live Pattern Review" : "Weekly Tracking", systemImage: tier == .pro ? "bolt.fill" : "calendar")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(tier.accent)
-                        }
-
-                        Text("Your behaviour is tracked against consistency, recovery speed, and breakdown windows so the app can show where execution drifts.")
-                            .foregroundStyle(.secondary)
-
-                        Chart(patternSeries) { item in
-                            LineMark(
-                                x: .value("Day", item.day),
-                                y: .value("Score", item.score)
-                            )
-                            .foregroundStyle(Color(red: 0.12, green: 0.41, blue: 0.67))
-                            .interpolationMethod(.catmullRom)
-
-                            RuleMark(y: .value("Target", 70))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-                                .foregroundStyle(.secondary.opacity(0.5))
-                        }
-                        .frame(height: 170)
+                Picker("Tracking Tab", selection: $selectedTab) {
+                    ForEach(TrackingTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
                     }
                 }
+                .pickerStyle(.segmented)
 
-                insightColumn(title: "What You're Doing Right", color: Color(red: 0.10, green: 0.58, blue: 0.45), actions: positiveActions)
-                insightColumn(title: "Where You're Going Wrong", color: Color(red: 0.80, green: 0.26, blue: 0.22), actions: riskActions)
-                insightColumn(title: "What To Change Next", color: Color(red: 0.89, green: 0.61, blue: 0.14), actions: changeActions)
+                switch selectedTab {
+                case .prompts:
+                    promptTrackingView
+                case .daily:
+                    coachingSummaryView
+                case .category:
+                    categoryTrackingView
+                }
 
                 if tier == .free {
                     SubscriptionPanel(currentTier: tier) { _ in
@@ -520,6 +1071,89 @@ struct BehavioralInsightsView: View {
             .padding(20)
         }
         .background(AppBackdrop())
+    }
+
+    private var promptTrackingView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("Tracking Status")
+                            .font(.headline)
+                        Spacer()
+                        Label(tier == .pro ? "Pro Review Active" : "Core Tracking", systemImage: tier == .pro ? "bolt.fill" : "calendar")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(tier.accent)
+                    }
+
+                    Chart(store.patternSeries) { item in
+                        LineMark(
+                            x: .value("Day", item.day),
+                            y: .value("Score", item.score)
+                        )
+                        .foregroundStyle(Color(red: 0.12, green: 0.41, blue: 0.67))
+                        .interpolationMethod(.catmullRom)
+
+                        RuleMark(y: .value("Target", 70))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                            .foregroundStyle(.secondary.opacity(0.5))
+                    }
+                    .frame(height: 180)
+                }
+            }
+
+            ForEach(store.todayPrompts) { prompt in
+                let entry = store.entryForToday(prompt: prompt)
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(prompt.moment.title)
+                                .font(.headline)
+                            Spacer()
+                            Text(entry?.status.title ?? "Pending")
+                                .foregroundStyle(entry?.status.color ?? .secondary)
+                        }
+                        Text(prompt.question)
+                            .font(.subheadline)
+                        Text(entry?.response ?? "No answer yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var coachingSummaryView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            insightColumn(title: "What You're Doing Right", color: CheckInStatus.onTrack.color, actions: store.positiveActions)
+            insightColumn(title: "Where You're Going Wrong", color: CheckInStatus.atRisk.color, actions: store.riskActions)
+            insightColumn(title: "What To Change", color: CheckInStatus.mixed.color, actions: store.changeActions)
+        }
+    }
+
+    private var categoryTrackingView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(store.categorySnapshots) { snapshot in
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(snapshot.category.title)
+                                .font(.headline)
+                            Spacer()
+                            Text("\(snapshot.averageScore)%")
+                                .font(.title3.bold())
+                        }
+                        Text("Category-wise summary")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(snapshot.summary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
     }
 
     private func insightColumn(title: String, color: Color, actions: [BehaviorAction]) -> some View {
@@ -536,7 +1170,6 @@ struct BehavioralInsightsView: View {
                             Text(action.title)
                                 .font(.headline)
                         }
-
                         Text(action.detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -560,9 +1193,8 @@ struct SettingsView: View {
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Toggle("Enable Tracking Reminders", isOn: $notificationsOn)
-
-                        Button("Show Start Landing Page") {
+                        Toggle("Enable Daily Check-In Reminders", isOn: $notificationsOn)
+                        Button("Show Landing") {
                             onOpenLanding()
                         }
                         .buttonStyle(.bordered)
@@ -579,7 +1211,7 @@ struct SettingsView: View {
                             .font(.headline)
                         LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
                         LabeledContent("Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
-                        Text("Imperium is focused on tracking, reflection, and behaviour change. It does not move money or connect to external accounts.")
+                        Text("Imperium gathers daily behavioural data through prompts and voice answers, then turns that into daily and category-wise summaries.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -610,14 +1242,11 @@ private struct SubscriptionPanel: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(tier.accent)
                             }
-
                             Text(description(for: tier))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-
                         Spacer()
-
                         Image(systemName: currentTier == tier ? "checkmark.circle.fill" : "circle")
                             .font(.title3)
                             .foregroundStyle(currentTier == tier ? tier.accent : .secondary)
@@ -626,7 +1255,7 @@ private struct SubscriptionPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(Color.white.opacity(currentTier == tier ? 0.94 : 0.72))
+                            .fill(AppTheme.cardFill(selected: currentTier == tier))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -641,9 +1270,9 @@ private struct SubscriptionPanel: View {
     private func description(for tier: SubscriptionTier) -> String {
         switch tier {
         case .free:
-            return "Daily tracking, weekly behaviour summary, and core insight cards."
+            return "Voice prompts, daily summary, category wise summary, and core tracking."
         case .pro:
-            return "Advanced pattern history, deeper failure analysis, and guided change recommendations."
+            return "Advanced coaching, deeper pattern reviews, and premium intervention insights."
         }
     }
 }
@@ -669,7 +1298,6 @@ private struct SectionHeader: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.title3.bold())
-
             if !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.subheadline)
@@ -711,23 +1339,21 @@ private struct SurfaceCard<Content: View>: View {
         content
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .background(AppTheme.surfaceFill, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                    .stroke(AppTheme.surfaceStroke, lineWidth: 1)
             )
     }
 }
 
 private struct AppBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color(red: 0.97, green: 0.92, blue: 0.84),
-                    Color(red: 0.88, green: 0.94, blue: 0.92),
-                    Color(red: 0.91, green: 0.94, blue: 0.98)
-                ],
+                colors: colorScheme == .dark ? AppTheme.darkBackdrop : AppTheme.lightBackdrop,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -748,11 +1374,43 @@ private struct AppBackdrop: View {
     }
 }
 
+private enum AppTheme {
+    static let surfaceFill = platformBackground.opacity(0.86)
+    static let surfaceStroke = Color.primary.opacity(0.08)
+    static let pillFill = Color.primary.opacity(0.08)
+    static let heroHighlight = platformBackground.opacity(0.92)
+
+    static let lightBackdrop: [Color] = [
+        Color(red: 0.97, green: 0.92, blue: 0.84),
+        Color(red: 0.88, green: 0.94, blue: 0.92),
+        Color(red: 0.91, green: 0.94, blue: 0.98)
+    ]
+
+    static let darkBackdrop: [Color] = [
+        Color(red: 0.10, green: 0.12, blue: 0.16),
+        Color(red: 0.08, green: 0.18, blue: 0.20),
+        Color(red: 0.12, green: 0.14, blue: 0.22)
+    ]
+
+    static func cardFill(selected: Bool) -> Color {
+        let base = platformBackground
+        return selected ? base.opacity(0.95) : base.opacity(0.76)
+    }
+
+    #if os(macOS)
+    static let platformBackground = Color(nsColor: .windowBackgroundColor)
+    #else
+    static let platformBackground = Color(uiColor: .secondarySystemBackground)
+    #endif
+}
+
 struct ContentView: View {
     @AppStorage("subscriptionTier") private var storedTier: String = SubscriptionTier.free.rawValue
     @State private var isShowingLanding = true
+    @State private var voiceStatusMessage: String?
     @StateObject private var voice = VoiceController()
     @StateObject private var app = AppViewModel()
+    @StateObject private var store = DailyCheckInStore()
 
     private let accent = Color(red: 0.12, green: 0.41, blue: 0.67)
     private let router = VoiceCommandRouter()
@@ -769,6 +1427,7 @@ struct ContentView: View {
             if isShowingLanding {
                 StartLandingView(
                     tier: selectedTierBinding.wrappedValue,
+                    store: store,
                     onEnterApp: {
                         app.currentTab = .dashboard
                         isShowingLanding = false
@@ -786,14 +1445,22 @@ struct ContentView: View {
             } else {
                 TabView(selection: $app.currentTab) {
                     NavigationStack {
-                        DailyLogView()
-                            .navigationTitle("Log")
+                        DailyLogView(
+                            store: store,
+                            tier: selectedTierBinding.wrappedValue,
+                            isVoiceRecording: voice.isRecording,
+                            isVoiceAuthorized: voice.isAuthorized,
+                            transcript: voice.transcript,
+                            voiceStatusMessage: voiceStatusMessage,
+                            onVoiceToggle: toggleVoiceForPrompt
+                        )
+                        .navigationTitle("Check-In")
                     }
-                    .tabItem { Label("Log", systemImage: "square.and.pencil") }
+                    .tabItem { Label("Check-In", systemImage: "mic.badge.plus") }
                     .tag(AppTab.log)
 
                     NavigationStack {
-                        InsightsDashboardView()
+                        InsightsDashboardView(store: store)
                             .navigationTitle("Overview")
                     }
                     .tabItem { Label("Overview", systemImage: "chart.bar.xaxis") }
@@ -802,6 +1469,7 @@ struct ContentView: View {
                     NavigationStack {
                         BehavioralInsightsView(
                             tier: selectedTierBinding.wrappedValue,
+                            store: store,
                             onUpgrade: { selectedTierBinding.wrappedValue = .pro }
                         )
                         .navigationTitle("Tracking")
@@ -840,7 +1508,7 @@ struct ContentView: View {
             if voice.isRecording || !voice.transcript.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "waveform")
-                    Text(voice.transcript.isEmpty ? "Listening..." : voice.transcript)
+                    Text(voice.isRecording ? "Listening for answer..." : voice.transcript)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -855,32 +1523,72 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 Button {
                     if voice.isRecording {
+                        store.cancelVoiceCapture()
+                        voiceStatusMessage = "Voice mode stopped."
                         voice.stop()
                     } else {
+                        voiceStatusMessage = "Requesting voice access..."
                         try? voice.start()
                     }
                 } label: {
                     Label(voice.isRecording ? "Stop" : "Listen", systemImage: voice.isRecording ? "mic.circle.fill" : "mic.circle")
                 }
                 .disabled(!voice.isAuthorized)
-                .help("Enable speech recognition permissions to use voice navigation.")
+                .help("Use the dedicated voice mode button in Check-In to save spoken answers to prompts.")
             }
         }
         .onAppear {
             voice.requestAuthorization()
         }
+        .onChange(of: voice.isAuthorized) { _, newValue in
+            if newValue {
+                voiceStatusMessage = "Voice mode is ready."
+                if store.hasPendingVoiceCapture, !voice.isRecording {
+                    try? voice.start()
+                }
+            } else if store.hasPendingVoiceCapture {
+                voiceStatusMessage = "Voice access is unavailable. Enable microphone and speech recognition permissions."
+            }
+        }
         .onChange(of: voice.isRecording) { _, newValue in
-            if newValue == false && !voice.transcript.isEmpty {
-                router.route(transcript: voice.transcript, to: app)
+            if newValue == false {
+                if !voice.transcript.isEmpty, store.capturePendingVoiceResponse(voice.transcript) {
+                    voiceStatusMessage = "Voice answer saved."
+                    app.showBanner("Voice answer saved")
+                } else if !voice.transcript.isEmpty {
+                    voiceStatusMessage = nil
+                    router.route(transcript: voice.transcript, to: app)
+                } else {
+                    voiceStatusMessage = "Voice mode stopped."
+                    store.cancelVoiceCapture()
+                }
+            } else {
+                voiceStatusMessage = "Listening for your answer..."
             }
         }
         .onChange(of: voice.transcript) { _, newValue in
-            if voice.isRecording, newValue.count > 12 {
+            if voice.isRecording, newValue.count > 12, !store.hasPendingVoiceCapture {
                 router.route(transcript: newValue, to: app)
             }
         }
         .onChange(of: app.currentTab) { _, newValue in
             isShowingLanding = (newValue == .home)
+        }
+    }
+
+    private func toggleVoiceForPrompt(_ prompt: GuidedPrompt, status: CheckInStatus) {
+        if voice.isRecording {
+            voiceStatusMessage = "Voice mode stopped."
+            voice.stop()
+        } else {
+            store.prepareVoiceCapture(for: prompt, status: status)
+            guard voice.isAuthorized else {
+                voiceStatusMessage = "Requesting microphone and speech access..."
+                voice.requestAuthorization()
+                return
+            }
+            voiceStatusMessage = "Listening for your answer..."
+            try? voice.start()
         }
     }
 }
@@ -918,9 +1626,17 @@ final class VoiceController: ObservableObject {
             return
         }
         SFSpeechRecognizer.requestAuthorization { status in
+            #if os(iOS) || os(tvOS) || os(visionOS)
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                DispatchQueue.main.async {
+                    self.isAuthorized = (status == .authorized) && granted
+                }
+            }
+            #else
             DispatchQueue.main.async {
                 self.isAuthorized = (status == .authorized)
             }
+            #endif
         }
         #else
         isAuthorized = false
@@ -974,14 +1690,6 @@ final class VoiceController: ObservableObject {
         #endif
     }
     #endif
-}
-
-struct BehaviorLog: Identifiable {
-    let id = UUID()
-    let date: Date
-    let category: String
-    let score: Int
-    let notes: String
 }
 
 #Preview {
